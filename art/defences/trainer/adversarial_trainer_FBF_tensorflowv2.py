@@ -106,6 +106,9 @@ class AdversarialTrainerFBFTensorflowv2(AdversarialTrainerFBF):
         batch_size = generator.batch_size
         nb_batches = int(np.ceil(size / batch_size))
 
+        def lr_schedule(t):
+            return np.interp([t], [0, nb_epochs * 2 // 5, nb_epochs], [0, 0.21, 0])[0]
+
         for i_epoch in range(nb_epochs):
             logger.info("Adversarial training FBF epoch %i/%i", i_epoch, nb_epochs)
             start_time = time.time()
@@ -161,6 +164,10 @@ class AdversarialTrainerFBFTensorflowv2(AdversarialTrainerFBF):
         # Check label shape
         if self._classifier._reduce_labels:
             y_preprocessed = np.argmax(y_preprocessed, axis=1)
+        for i_batch, o_batch in generator.iterator:
+            if self._reduce_labels:
+                o_batch = tf.math.argmax(o_batch, axis=1)
+            self._train_step(i_batch, o_batch)
         #
         # i_batch = torch.from_numpy(x_preprocessed).to(
         #     self._classifier._device)
