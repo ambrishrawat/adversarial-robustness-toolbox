@@ -2,10 +2,13 @@
 This is an example of how to use ART for adversarial training of a model with Fast is better than free protocol
 """
 
+import numpy as np
+
 from art.data_generators import TensorFlowV2DataGenerator
 from art.defences.trainer import AdversarialTrainerFBFTensorflowv2
 from art.estimators.classification import TensorFlowV2Classifier
 from art.utils import load_cifar10
+from art.attacks.evasion import ProjectedGradientDescent
 
 import tensorflow as tf
 from tensorflow.keras import Model
@@ -95,6 +98,32 @@ art_datagen = TensorFlowV2DataGenerator(iterator=train_dataset,
                                         size=x_train.shape[0],
                                         batch_size=128
                                         )
-
 # Step 5: fit the trainer
 trainer.fit_generator(art_datagen, nb_epochs=1)
+
+x_test_pred = np.argmax(classifier.predict(x_test), axis=1)
+print(
+    "Accuracy on original PGD adversarial samples: %.2f%%"
+    % np.sum(x_test_pred == np.argmax(y_test, axis=1))
+    / x_test.shape[0]
+    * 100
+)
+
+attack = ProjectedGradientDescent(
+    classifier,
+    norm=np.inf,
+    eps=8.0 / 255.0,
+    eps_step=2.0 / 255.0,
+    max_iter=40,
+    targeted=False,
+    num_random_init=5,
+    batch_size=32,
+)
+x_test_attack = attack.generate(x_test)
+x_test_attack_pred = np.argmax(classifier.predict(x_test_attack), axis=1)
+print(
+    "Accuracy on original PGD adversarial samples: %.2f%%"
+    % np.sum(x_test_attack_pred == np.argmax(y_test, axis=1))
+    / x_test.shape[0]
+    * 100
+)
