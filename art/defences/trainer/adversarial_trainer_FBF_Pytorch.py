@@ -187,7 +187,7 @@ class AdversarialTrainerFBFPyTorch(AdversarialTrainerFBF):
 
     def _batch_process(self, x_batch, y_batch, lr):
         """
-        Perform the operations of FBF for a batch of data.
+        Perform the operations of FBF for a batch of data obtained as numpy.
         See class documentation for more information on the exact procedure.
 
         :param x_batch: batch of x.

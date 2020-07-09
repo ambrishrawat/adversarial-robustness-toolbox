@@ -56,8 +56,7 @@ def train_step(images, labels):
         predictions = model(images, training=True)
         loss = loss_object(labels, predictions)
     gradients = tape.gradient(loss, model.trainable_variables)
-    gradients = [(tf.clip_by_global_norm(grad, 0.5))
-                 for grad in gradients]
+    gradients, _ = tf.clip_by_global_norm(gradients, 0.5)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
 

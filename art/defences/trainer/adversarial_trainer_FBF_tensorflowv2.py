@@ -86,7 +86,49 @@ class AdversarialTrainerFBFTensorflowv2(AdversarialTrainerFBF):
         def lr_schedule(t):
             return np.interp([t], [0, nb_epochs * 2 // 5, nb_epochs], [0, 0.21, 0])[0]
 
-        pass
+        for i_epoch in range(nb_epochs):
+            logger.info("Adversarial training FBF epoch %i/%i", i_epoch, nb_epochs)
+
+            # Shuffle the examples
+            np.random.shuffle(ind)
+            start_time = time.time()
+            train_loss = 0
+            train_n = 0
+
+            for batch_id in range(nb_batches):
+                lr = lr_schedule(i_epoch + (batch_id + 1) / nb_batches)
+
+                # Create batch data
+                x_batch = x[ind[batch_id * batch_size: min((batch_id + 1) * batch_size, x.shape[0])]].copy()
+                y_batch = y[ind[batch_id * batch_size: min((batch_id + 1) * batch_size, x.shape[0])]]
+
+                _train_loss, _train_n = self._batch_process(x_batch, y_batch, lr)
+
+                train_loss += _train_loss
+                train_n += _train_n
+
+            train_time = time.time()
+
+            # compute accuracy
+            if validation_data is not None:
+                (x_test, y_test) = validation_data
+                output = np.argmax(self.predict(x_test), axis=1)
+                nb_correct_pred = np.sum(output == np.argmax(y_test, axis=1))
+                logger.info(
+                    "{} \t {:.1f} \t {:.4f} \t {:.4f} \t {:.4f}".format(
+                        i_epoch,
+                        train_time - start_time,
+                        lr,
+                        train_loss / train_n,
+                        nb_correct_pred / x_test.shape[0],
+                    )
+                )
+            else:
+                logger.info(
+                    "{} \t {:.1f} \t {:.4f} \t {:.4f}".format(
+                        i_epoch, train_time - start_time, lr, train_loss / train_n
+                    )
+                )
 
     def fit_generator(self, generator, nb_epochs=20, **kwargs):
         """
@@ -124,17 +166,15 @@ class AdversarialTrainerFBFTensorflowv2(AdversarialTrainerFBF):
                 x_batch, y_batch = generator.get_batch()
                 x_batch = x_batch.copy()
 
-                _train_loss, _train_acc, _train_n = self._batch_process(x_batch, y_batch, lr)
+                _train_loss, _train_n = self._batch_process(x_batch, y_batch, lr)
 
                 train_loss += _train_loss
-                train_acc += _train_acc
                 train_n += _train_n
 
             train_time = time.time()
             logger.info(
-                '{} \t {:.1f} \t {:.4f} \t {:.4f} \t {:.4f}'.format(i_epoch, train_time - start_time, lr,
-                                                                    train_loss / train_n,
-                                                                    train_acc / train_n))
+                '{} \t {:.1f} \t {:.4f} \t {:.4f}'.format(i_epoch, train_time - start_time, lr,
+                                                          train_loss / train_n))
         pass
 
     def _batch_process(self, x_batch, y_batch, lr):
@@ -160,6 +200,8 @@ class AdversarialTrainerFBFTensorflowv2(AdversarialTrainerFBF):
         x_batch_pert = np.clip(x_batch + delta, self._classifier.clip_values[0],
                                self._classifier.clip_values[1])
 
+        # y = check_and_transform_label_format(y, self.nb_classes) #(line 788 tensorflow)
+
         # Apply preprocessing
         x_preprocessed, y_preprocessed = self._classifier._apply_preprocessing(x_batch_pert, y_batch, fit=True)
 
@@ -167,38 +209,12 @@ class AdversarialTrainerFBFTensorflowv2(AdversarialTrainerFBF):
         if self._classifier._reduce_labels:
             y_preprocessed = np.argmax(y_preprocessed, axis=1)
 
+        train_ds = tf.data.Dataset.from_tensor_slices((x_preprocessed, y_preprocessed)).shuffle(10000).batch(n)
 
-        #
-        # i_batch = torch.from_numpy(x_preprocessed).to(
-        #     self._classifier._device)
-        # o_batch = torch.from_numpy(y_preprocessed).to(
-        #     self._classifier._device)
-        #
-        # # Zero the parameter gradients
-        # self._classifier._optimizer.zero_grad()
-        #
-        # # Perform prediction
-        # model_outputs = self._classifier._model(i_batch)
-        #
-        # # Form the loss function
-        # loss = self._classifier._loss(model_outputs[-1], o_batch)
-        #
-        # self._classifier._optimizer.param_groups[0].update(lr=lr)
-        #
-        # # Actual training
-        # if self._use_amp:
-        #     import apex.amp as amp
-        #     with amp.scale_loss(loss, self._classifier._optimizer) as scaled_loss:
-        #         scaled_loss.backward()
-        # else:
-        #     loss.backward()
-        #
-        # # clip the gradients
-        # nn.utils.clip_grad_norm_(self._classifier._model.parameters(), 0.5)
-        # self._classifier._optimizer.step()
-        #
-        train_loss = 0.0 #loss.item() * o_batch.size(0)
-        train_acc = 0.0 #(model_outputs[0].max(1)[1] == o_batch).sum().item()
-        train_n = 1# o_batch.size(0)
+        for images, labels in train_ds:
+            self._classifier._train_step(images, labels)
 
-        return train_loss, train_acc, train_n
+        train_n = n
+        train_loss = self._classifier._loss_object(y_preprocessed, self._classifier._model(x_preprocessed)).numpy()
+
+        return train_loss, train_n
