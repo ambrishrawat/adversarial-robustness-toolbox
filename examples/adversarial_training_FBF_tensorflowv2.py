@@ -10,8 +10,6 @@ from art.estimators.classification import TensorFlowV2Classifier
 from art.utils import load_cifar10
 from art.attacks.evasion import ProjectedGradientDescent
 
-import tensorflow as tf
-from tensorflow.keras import Model
 from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPool2D
 
 """
@@ -19,47 +17,152 @@ For this example we choose the PreActResNet model as used in the paper (https://
 The code for the model architecture has been adopted from
 https://github.com/anonymous-sushi-armadillo/fast_is_better_than_free_CIFAR10/blob/master/preact_resnet.py
 """
+import tensorflow as tf
+from tensorflow.keras import layers, Sequential, Model
 
 
-class TensorFlowModel(Model):
-    """
-    Standard TensorFlow model for unit testing.
-    """
+class BasicBlock(layers.Layer):
+    def __init__(self, kernels, stride=1):
+        super(BasicBlock, self).__init__()
 
-    def __init__(self):
-        super(TensorFlowModel, self).__init__()
-        self.conv1 = Conv2D(filters=4, kernel_size=5, activation='relu')
-        self.conv2 = Conv2D(filters=10, kernel_size=5, activation='relu')
-        self.maxpool = MaxPool2D(pool_size=(2, 2), strides=(2, 2), padding='valid', data_format=None)
-        self.flatten = Flatten()
-        self.dense1 = Dense(100, activation='relu')
-        self.logits = Dense(10, activation='linear')
+        self.features = Sequential([
+            layers.Conv2D(kernels, (3, 3), strides=stride, padding='same'),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+            layers.Conv2D(kernels, (3, 3), strides=1, padding='same'),
+            layers.BatchNormalization()
+        ])
 
-    def call(self, x):
-        """
-        Call function to evaluate the model.
+        if stride != 1:
+            shortcut = [
+                layers.Conv2D(kernels, (1, 1), strides=stride),
+                layers.BatchNormalization()
+            ]
+        else:
+            shortcut = []
+        self.shorcut = Sequential(shortcut)
 
-        :param x: Input to the model
-        :return: Prediction of the model
-        """
-        x = self.conv1(x)
-        x = self.maxpool(x)
-        x = self.conv2(x)
-        x = self.maxpool(x)
-        x = self.flatten(x)
-        x = self.dense1(x)
-        x = self.logits(x)
+    def call(self, inputs, training=False):
+        residual = self.shorcut(inputs, training=training)
+        x = self.features(inputs, training=training)
+        x = tf.nn.relu(layers.add([residual, x]))
         return x
 
 
-optimizer = tf.keras.optimizers.Adam(learning_rate=0.01)
+class BottleNeckBlock(layers.Layer):
+    def __init__(self, kernels, stride=1):
+        super(BottleNeckBlock, self).__init__()
+
+        self.features = Sequential([
+            layers.Conv2D(kernels, (1, 1), strides=1, padding='same'),
+            layers.BatchNormalization(),
+            layers.Conv2D(kernels, (3, 3), strides=stride, padding='same'),
+            layers.BatchNormalization(),
+            layers.Conv2D(kernels * 4, (1, 1), strides=1, padding='same'),
+            layers.BatchNormalization(),
+        ])
+
+        self.shorcut = Sequential([
+            layers.Conv2D(kernels * 4, (1, 1), strides=stride),
+            layers.BatchNormalization()
+        ])
+
+    def call(self, inputs, training=False):
+        residual = self.shorcut(inputs, training=training)
+        x = self.features(inputs, training=training)
+        x = tf.nn.relu(x + residual)
+        return x
+
+
+class ResNet(Model):
+    def __init__(self, block, num_blocks, num_classes, input_shape=(32, 32, 3)):
+        super(ResNet, self).__init__()
+        self.conv1 = Sequential([
+            layers.Input(input_shape),
+            layers.Conv2D(64, (3, 3), padding='same', use_bias=False),
+            layers.BatchNormalization(),
+            layers.ReLU()
+        ])
+        self.conv2_x = self._make_layer(block, 64, num_blocks[0], 1)
+        self.conv3_x = self._make_layer(block, 128, num_blocks[1], 2)
+        self.conv4_x = self._make_layer(block, 256, num_blocks[2], 2)
+        self.conv5_x = self._make_layer(block, 512, num_blocks[3], 2)
+        self.gap = layers.GlobalAveragePooling2D()
+        self.fc = layers.Dense(num_classes, activation='softmax')
+
+    def _make_layer(self, block, kernels, num_blocks, stride):
+        strides = [stride] + [1] * (num_blocks - 1)
+        nets = []
+        for stride in strides:
+            nets.append(block(kernels, stride))
+        return Sequential(nets)
+
+    def call(self, inputs):
+        x = self.conv1(inputs)
+        x = self.conv2_x(x)
+        x = self.conv3_x(x)
+        x = self.conv4_x(x)
+        x = self.conv5_x(x)
+        x = self.gap(x)
+        x = self.fc(x)
+        return x
+
+
+def ResNet18(num_classes):
+    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes)
+
+
+def ResNet34(num_classes):
+    return ResNet(BasicBlock, [3, 4, 6, 3], num_classes)
+
+
+def ResNet50(num_classes):
+    return ResNet(BottleNeckBlock, [3, 4, 6, 3], num_classes)
+
+
+def ResNet101(num_classes):
+    return ResNet(BottleNeckBlock, [3, 4, 23, 3], num_classes)
+
+
+def ResNet152(num_classes):
+    return ResNet(BottleNeckBlock, [3, 8, 36, 3], num_classes)
+
+# class TensorFlowModel(Model):
+#
+#     def __init__(self):
+#         super(TensorFlowModel, self).__init__()
+#         self.conv1 = Conv2D(filters=4, kernel_size=5, activation='relu')
+#         self.conv2 = Conv2D(filters=10, kernel_size=5, activation='relu')
+#         self.maxpool = MaxPool2D(pool_size=(2, 2), strides=(2, 2), padding='valid', data_format=None)
+#         self.flatten = Flatten()
+#         self.dense1 = Dense(100, activation='relu')
+#         self.logits = Dense(10, activation='linear')
+#
+#     def call(self, x):
+#         """
+#         Call function to evaluate the model.
+#
+#         :param x: Input to the model
+#         :return: Prediction of the model
+#         """
+#         x = self.conv1(x)
+#         x = self.maxpool(x)
+#         x = self.conv2(x)
+#         x = self.maxpool(x)
+#         x = self.flatten(x)
+#         x = self.dense1(x)
+#         x = self.logits(x)
+#         return x
+#
+
+optimizer = tf.keras.optimizers.SGD(learning_rate=0.001)
 
 def train_step(images, labels):
     with tf.GradientTape() as tape:
         predictions = model(images, training=True)
         loss = loss_object(labels, predictions)
     gradients = tape.gradient(loss, model.trainable_variables)
-    gradients, _ = tf.clip_by_global_norm(gradients, 0.5)
+    # gradients, _ = tf.clip_by_global_norm(gradients, 0.5)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
 
@@ -75,7 +178,7 @@ cifar_std = (0.2471, 0.2435, 0.2616)
 
 # Step 2: create the PyTorch model
 
-model = TensorFlowModel()
+model = ResNet18(10)
 loss_object = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
 
 train_dataset = tf.data.Dataset.from_tensor_slices((x_train, y_train))
@@ -101,7 +204,7 @@ art_datagen = TensorFlowV2DataGenerator(iterator=train_dataset,
 # Step 5: fit the trainer
 trainer.fit_generator(art_datagen, nb_epochs=1)
 
-x_test_pred = np.argmax(classifier.predict(x_test), axis=1)
+x_test_pred = np.argmax(trainer.predict(x_test), axis=1)
 print(
     "Accuracy on original PGD adversarial samples: %.2f%%"
     % (np.sum(x_test_pred == np.argmax(y_test, axis=1))
@@ -119,7 +222,7 @@ attack = ProjectedGradientDescent(
     batch_size=32,
 )
 x_test_attack = attack.generate(x_test)
-x_test_attack_pred = np.argmax(classifier.predict(x_test_attack), axis=1)
+x_test_attack_pred = np.argmax(trainer.predict(x_test_attack), axis=1)
 print(
     "Accuracy on original PGD adversarial samples: %.2f%%"
     % (np.sum(x_test_attack_pred == np.argmax(y_test, axis=1))
