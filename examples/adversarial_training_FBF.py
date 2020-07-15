@@ -147,6 +147,11 @@ class CIFAR10_dataset(Dataset):
 # Step 1: Load the CIFAR10 dataset
 (x_train, y_train), (x_test, y_test), min_pixel_value, max_pixel_value = load_cifar10()
 
+x_train = x_train[0:200]
+y_train = y_train[0:200]
+x_test = x_test[0:200]
+y_test = y_test[0:200]
+
 cifar_mu = np.ones((3, 32, 32))
 cifar_mu[0, :, :] = 0.4914
 cifar_mu[1, :, :] = 0.4822
@@ -161,19 +166,6 @@ cifar_std[2, :, :] = 0.2616
 
 x_train = x_train.transpose(0, 3, 1, 2).astype("float32")
 x_test = x_test.transpose(0, 3, 1, 2).astype("float32")
-
-tensor_x = torch.Tensor(x_train)  # transform to torch tensor
-tensor_y = torch.Tensor(y_train)
-
-my_dataset = TensorDataset(tensor_x, tensor_y)  # create your datset
-my_dataloader = DataLoader(my_dataset)  # create your dataloader
-
-transform = transforms.Compose(
-    [transforms.RandomCrop(32, padding=4), transforms.RandomHorizontalFlip(), transforms.ToTensor()]
-)
-
-dataset = CIFAR10_dataset(x_train, y_train, transform=transform)
-dataloader = DataLoader(dataset, batch_size=128)
 
 # Step 2: create the PyTorch model
 model = PreActResNet18()
@@ -211,21 +203,19 @@ attack = ProjectedGradientDescent(
     num_random_init=5,
     batch_size=32,
 )
-x_test_attack = attack.generate(x_test)
-x_test_attack_pred = np.argmax(classifier.predict(x_test_attack), axis=1)
-print(
-    "Accuracy on original PGD adversarial samples: %.2f%%"
-    % np.sum(x_test_attack_pred == np.argmax(y_test, axis=1))
-    / x_test.shape[0]
-    * 100
-)
 
 # Step 4: Create the trainer object - AdversarialTrainerFBFPyTorch
 # if you have apex installed, change use_amp to True
 epsilon = 8.0 / 255.0
 trainer = AdversarialTrainerFBFPyTorch(classifier, eps=epsilon, use_amp=False)
 
-# Build a Keras image augmentation object and wrap it in ART
+# Build a image augmentation object and wrap it in ART
+transform = transforms.Compose(
+    [transforms.RandomCrop(32, padding=4), transforms.RandomHorizontalFlip(), transforms.ToTensor()]
+)
+
+dataset = CIFAR10_dataset(x_train, y_train, transform=transform)
+dataloader = DataLoader(dataset, batch_size=128)
 art_datagen = PyTorchDataGenerator(iterator=dataloader, size=x_train.shape[0], batch_size=128)
 
 # Step 5: fit the trainer
@@ -235,7 +225,7 @@ x_test_attack = attack.generate(x_test)
 x_test_attack_pred = np.argmax(classifier.predict(x_test_attack), axis=1)
 print(
     "Accuracy on original PGD adversarial samples after adversarial training: %.2f%%"
-    % np.sum(x_test_attack_pred == np.argmax(y_test, axis=1))
+    % (np.sum(x_test_attack_pred == np.argmax(y_test, axis=1))
     / x_test.shape[0]
-    * 100
+    * 100)
 )
