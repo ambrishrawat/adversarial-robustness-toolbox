@@ -84,11 +84,10 @@ class AdversarialTrainerFBFTensorflowv2(AdversarialTrainerFBF):
         ind = np.arange(len(x))
 
         def lr_schedule(t):
-            return np.interp([t], [0, nb_epochs * 2 // 5, nb_epochs], [0, 0.21, 0])[0]
+            return np.interp([t], [0, nb_epochs * 2 // 5, nb_epochs], [0, 0.01, 0])[0]
 
         for i_epoch in range(nb_epochs):
-            logger.info("Adversarial training FBF epoch %i/%i", i_epoch, nb_epochs)
-
+            
             # Shuffle the examples
             np.random.shuffle(ind)
             start_time = time.time()
@@ -150,10 +149,9 @@ class AdversarialTrainerFBFTensorflowv2(AdversarialTrainerFBF):
         nb_batches = int(np.ceil(size / batch_size))
 
         def lr_schedule(t):
-            return np.interp([t], [0, nb_epochs * 2 // 5, nb_epochs], [0, 0.21, 0])[0]
+            return np.interp([t], [0, nb_epochs * 2 // 5, nb_epochs], [0, 0.01, 0])[0]
 
         for i_epoch in range(nb_epochs):
-            logger.info("Adversarial training FBF epoch %i/%i", i_epoch, nb_epochs)
             start_time = time.time()
             train_loss = 0
             train_acc = 0

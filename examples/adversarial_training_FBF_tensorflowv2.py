@@ -127,35 +127,8 @@ def ResNet101(num_classes):
 def ResNet152(num_classes):
     return ResNet(BottleNeckBlock, [3, 8, 36, 3], num_classes)
 
-# class TensorFlowModel(Model):
-#
-#     def __init__(self):
-#         super(TensorFlowModel, self).__init__()
-#         self.conv1 = Conv2D(filters=4, kernel_size=5, activation='relu')
-#         self.conv2 = Conv2D(filters=10, kernel_size=5, activation='relu')
-#         self.maxpool = MaxPool2D(pool_size=(2, 2), strides=(2, 2), padding='valid', data_format=None)
-#         self.flatten = Flatten()
-#         self.dense1 = Dense(100, activation='relu')
-#         self.logits = Dense(10, activation='linear')
-#
-#     def call(self, x):
-#         """
-#         Call function to evaluate the model.
-#
-#         :param x: Input to the model
-#         :return: Prediction of the model
-#         """
-#         x = self.conv1(x)
-#         x = self.maxpool(x)
-#         x = self.conv2(x)
-#         x = self.maxpool(x)
-#         x = self.flatten(x)
-#         x = self.dense1(x)
-#         x = self.logits(x)
-#         return x
-#
 
-optimizer = tf.keras.optimizers.SGD(learning_rate=0.001)
+optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
 
 def train_step(images, labels):
     with tf.GradientTape() as tape:
