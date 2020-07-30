@@ -179,7 +179,7 @@ trainer.fit_generator(art_datagen, nb_epochs=1)
 
 x_test_pred = np.argmax(trainer.predict(x_test), axis=1)
 print(
-    "Accuracy on original PGD adversarial samples: %.2f%%"
+    "Accuracy on benign samples: %.2f%%"
     % (np.sum(x_test_pred == np.argmax(y_test, axis=1))
        / x_test.shape[0] * 100)
 )
@@ -197,7 +197,7 @@ attack = ProjectedGradientDescent(
 x_test_attack = attack.generate(x_test)
 x_test_attack_pred = np.argmax(trainer.predict(x_test_attack), axis=1)
 print(
-    "Accuracy on original PGD adversarial samples: %.2f%%"
+    "Accuracy on PGD adversarial samples: %.2f%%"
     % (np.sum(x_test_attack_pred == np.argmax(y_test, axis=1))
        / x_test.shape[0] * 100)
 )

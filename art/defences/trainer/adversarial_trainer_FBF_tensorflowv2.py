@@ -87,7 +87,7 @@ class AdversarialTrainerFBFTensorflowv2(AdversarialTrainerFBF):
             return np.interp([t], [0, nb_epochs * 2 // 5, nb_epochs], [0, 0.01, 0])[0]
 
         for i_epoch in range(nb_epochs):
-            
+
             # Shuffle the examples
             np.random.shuffle(ind)
             start_time = time.time()
